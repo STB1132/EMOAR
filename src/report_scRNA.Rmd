@@ -1,0 +1,104 @@
+---
+title: "Single-Cell RNA-seq Showcase"
+author: "Sara Azidane"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    theme: cosmo
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(scRNAseq)
+library(SingleCellExperiment)
+library(scater)
+library(scran)
+library(ggplot2)
+library(plotly)
+library(DT)
+library(dplyr)
+```
+
+# Project Overview <span style="color:#1f77b4;"></span>
+
+This is a **single-cell RNA-seq analysis showcase**, designed to highlight skills in R, visualization, and reproducible reporting. It includes **QC, normalization, dimensionality reduction, clustering, interactive tables, and interactive plots** for portfolio purposes.
+
+# Data <span style="color:#ff7f0e;"></span>
+
+We are using the **Reprocessed Allen Brain Atlas dataset** from the `scRNAseq` Bioconductor package.
+
+```{r load-data}
+sce <- ReprocessedAllenData()
+# Basic info about the dataset
+sce
+```
+
+# QC and Filtering <span style="color:#2ca02c;"></span>
+
+```{r qc-filter}
+qc <- perCellQCMetrics(sce, assay.type="tophat_counts")
+low_lib <- isOutlier(qc$sum, nmads=3, type="lower")
+sce <- sce[, !low_lib]
+sce
+```
+
+# Normalization and HVG Selection <span style="color:#d62728;"></span>
+
+```{r normalization}
+sce <- computeSumFactors(sce, assay.type="tophat_counts")
+sce <- logNormCounts(sce, assay.type="tophat_counts")
+dec <- modelGeneVar(sce, assay.type="tophat_counts")
+top_hvgs <- getTopHVGs(dec, n=2000)
+top_hvgs[1:10]
+```
+
+# PCA and UMAP <span style="color:#9467bd;">️</span>
+
+```{r pca-umap}
+sce <- runPCA(sce, subset_row=top_hvgs)
+sce <- runUMAP(sce, dimred="PCA")
+
+umap_plot <- plotUMAP(sce, colour_by="Core.Type") + 
+  ggtitle("UMAP of Single-Cell RNA-seq") +
+  theme_minimal(base_size=14)
+umap_plot
+```
+
+# Interactive Volcano-Like Plot for Marker Genes <span style="color:#ff69b4;"></span>
+
+```{r markers, eval=FALSE}
+# Example marker gene detection
+clusters <- quickCluster(sce, method="igraph", assay.type="tophat_counts" )
+sce$cluster <- factor(clusters)
+markers <- findMarkers(sce, groups = sce$cluster, assay.type = "tophat_counts")
+
+# Take the first cluster as an example
+marker_df <- as.data.frame(markers[[1]]) %>%
+  mutate(gene = rownames(.))
+
+marker_plot <- ggplot(marker_df, aes(x = logFC.2, y = -log10(FDR), text = gene)) +
+  geom_point(size = 3, alpha = 0.7) +
+  theme_minimal(base_size = 14) +
+  ggtitle("Marker Gene Volcano-Like Plot") +
+  scale_color_manual(values = RColorBrewer::brewer.pal(8, "Set2"))
+
+marker_plotly <- ggplotly(marker_plot, tooltip = c("text","x","y"))
+marker_plotly
+
+
+
+```
+
+# Interactive Tables <span style="color:#2ca02c;"></span>
+
+```{r tables}
+DT::datatable(as.data.frame(colData(sce)), options = list(pageLength = 10, scrollX = TRUE))
+```
+
+
+```{r knit-folder, include=FALSE}
+# This is only relevant when knitting interactively
+output_file <- "../results/scRNAseq_showcase.html"

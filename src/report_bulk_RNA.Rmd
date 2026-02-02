@@ -106,3 +106,10 @@ volc <- ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj), color = sig, te
 # Convert to interactive plotly
 volc_plotly <- ggplotly(volc, tooltip = c("text","x","y"))
 volc_plotly
+
+```
+
+```{r knit-folder, include=FALSE}
+# This is only relevant when knitting interactively
+output_file <- "../results/rna_bulk_showcase.html"
+```
