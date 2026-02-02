@@ -1,0 +1,108 @@
+---
+title: "Multi-Omics Showcase: Bulk RNA-seq Analysis"
+author: "Sara Azidane"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    theme: cosmo
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(DESeq2)
+library(airway)
+library(ggplot2)
+library(plotly)
+library(DT)
+library(dplyr)
+```
+
+# Showcase Overview <span style="color:#1f77b4;"></span>
+
+This project showcases a **simple bulk RNA-seq analysis** as I would do it using R and inluding  **QC, normalization, differential expression, interactive visualization (which for me are super important to share results), and interactive tables (also critical for results discussion)**. 
+
+# Data <span style="color:#ff7f0e;"></span>
+
+For this showcase, I will be using the **Airway dataset** from Bioconductor: human airway smooth muscle cells, treated with dexamethasone vs untreated.
+
+```{r load-data}
+data(airway)
+airway$dex <- relevel(airway$dex, "untrt")
+
+# Build DESeq2 design
+dds <- DESeqDataSet(airway, ~ dex)
+
+# QC and filter
+keep <- rowSums(counts(dds) >= 10) >= 4
+dds <- dds[keep,]
+
+# Run DE
+dds <- DESeq(dds)
+res <- results(dds)
+
+# Prepare data frame
+res_df <- as.data.frame(res) %>%
+  dplyr::mutate(
+    gene = rownames(.),
+    sig = case_when(
+      padj < 0.05 & log2FoldChange > 1  ~ "Up",
+      padj < 0.05 & log2FoldChange < -1 ~ "Down",
+      TRUE ~ "NS"
+    ),
+    padj = ifelse(is.na(padj), 1, padj)
+  )
+```
+
+# Interactive Tables <span style="color:#2ca02c;">📝</span>
+
+## DE Results Table
+
+```{r de-table}
+DT::datatable(res_df, filter = 'top', options = list(pageLength = 10, scrollX = TRUE))
+```
+
+## Summary Table
+
+```{r summary-table}
+sum_table <- res_df %>%
+  group_by(sig) %>%
+  summarise(count = n())
+
+DT::datatable(sum_table, options = list(dom = 't'))
+```
+
+# PCA <span style="color:#d62728;"></span>
+
+```{r pca-plot}
+vsd <- vst(dds)
+pca_data <- plotPCA(vsd, intgroup="dex", returnData=TRUE)
+
+pca_plot <- ggplot(pca_data, aes(PC1, PC2, color=dex, label=name)) +
+  geom_point(size=5, alpha=0.6) +
+  geom_text(vjust=-1.5, size=3) +
+  scale_color_manual(values=c("#1f77b4", "#ff7f0e")) +
+  ggtitle("PCA of Bulk RNA-seq Samples") +
+  theme_minimal(base_size=14)
+
+pca_plot
+```
+
+# Interactive Volcano Plot <span style="color:#9467bd;">🌋</span>
+
+```{r volcano-plot}
+volc <- ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj), color = sig, text = gene)) +
+  geom_point(alpha = 0.7, size = 3) +
+  scale_color_manual(values = c("Up" = "#e41a1c", "Down" = "#377eb8", "NS" = "#4daf4a")) +
+  geom_vline(xintercept = c(-1,1), linetype="dashed", color="black") +
+  geom_hline(yintercept = -log10(0.05), linetype="dashed", color="black") +
+  theme_minimal(base_size=14) +
+  ggtitle("Bulk RNA-seq Volcano Plot") +
+  xlab("Log2 Fold Change") +
+  ylab("-Log10 Adjusted P-value")
+
+# Convert to interactive plotly
+volc_plotly <- ggplotly(volc, tooltip = c("text","x","y"))
+volc_plotly
